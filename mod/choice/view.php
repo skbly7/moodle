@@ -111,7 +111,11 @@ if ($groupmode) {
     groups_get_activity_group($cm, true);
     groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/choice/view.php?id='.$id);
 }
-$allresponses = choice_get_response_data($choice, $cm, $groupmode);   // Big function, approx 6 SQL calls per user
+
+// Check if we want to include responses from inactive users.
+$onlyactive = $choice->includeinactive ? false : true;
+
+$allresponses = choice_get_response_data($choice, $cm, $groupmode, $onlyactive);   // Big function, approx 6 SQL calls per user.
 
 
 if (has_capability('mod/choice:readresponses', $context)) {
@@ -174,7 +178,7 @@ if (!$choiceformshown) {
     } else if (!is_enrolled($context)) {
         // Only people enrolled can make a choice
         $SESSION->wantsurl = qualified_me();
-        $SESSION->enrolcancel = (!empty($_SERVER['HTTP_REFERER'])) ? $_SERVER['HTTP_REFERER'] : '';
+        $SESSION->enrolcancel = clean_param($_SERVER['HTTP_REFERER'], PARAM_LOCALURL);
 
         $coursecontext = context_course::instance($course->id);
         $courseshortname = format_string($course->shortname, true, array('context' => $coursecontext));

@@ -1128,20 +1128,34 @@ class core_user_external extends external_api {
             return $warnings;
         }
 
-        $userdevice = new stdclass;
-        $userdevice->userid     = $USER->id;
-        $userdevice->appid      = $params['appid'];
-        $userdevice->name       = $params['name'];
-        $userdevice->model      = $params['model'];
-        $userdevice->platform   = $params['platform'];
-        $userdevice->version    = $params['version'];
-        $userdevice->pushid     = $params['pushid'];
-        $userdevice->uuid       = $params['uuid'];
-        $userdevice->timecreated  = time();
-        $userdevice->timemodified = $userdevice->timecreated;
+        // Notice that we can have multiple devices because previously it was allowed to have repeated ones.
+        // Since we don't have a clear way to decide which one is the more appropiate, we update all.
+        if ($userdevices = $DB->get_records('user_devices', array('uuid' => $params['uuid'],
+                'appid' => $params['appid'], 'userid' => $USER->id))) {
 
-        if (!$DB->insert_record('user_devices', $userdevice)) {
-            throw new moodle_exception("There was a problem saving in the database the device with key: " . $params['pushid']);
+            foreach ($userdevices as $userdevice) {
+                $userdevice->version    = $params['version'];   // Maybe the user upgraded the device.
+                $userdevice->pushid     = $params['pushid'];
+                $userdevice->timemodified  = time();
+                $DB->update_record('user_devices', $userdevice);
+            }
+
+        } else {
+            $userdevice = new stdclass;
+            $userdevice->userid     = $USER->id;
+            $userdevice->appid      = $params['appid'];
+            $userdevice->name       = $params['name'];
+            $userdevice->model      = $params['model'];
+            $userdevice->platform   = $params['platform'];
+            $userdevice->version    = $params['version'];
+            $userdevice->pushid     = $params['pushid'];
+            $userdevice->uuid       = $params['uuid'];
+            $userdevice->timecreated  = time();
+            $userdevice->timemodified = $userdevice->timecreated;
+
+            if (!$DB->insert_record('user_devices', $userdevice)) {
+                throw new moodle_exception("There was a problem saving in the database the device with key: " . $params['pushid']);
+            }
         }
 
         return $warnings;
@@ -1225,6 +1239,185 @@ class core_user_external extends external_api {
             array(
                 'removed' => new external_value(PARAM_BOOL, 'True if removed, false if not removed because it doesn\'t exists'),
                 'warnings' => new external_warnings(),
+            )
+        );
+    }
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 2.9
+     */
+    public static function view_user_list_parameters() {
+        return new external_function_parameters(
+            array(
+                'courseid' => new external_value(PARAM_INT, 'id of the course, 0 for site')
+            )
+        );
+    }
+
+    /**
+     * Simulate the /user/index.php web interface page triggering events
+     *
+     * @param int $courseid id of course
+     * @return array of warnings and status result
+     * @since Moodle 2.9
+     * @throws moodle_exception
+     */
+    public static function view_user_list($courseid) {
+        global $CFG;
+        require_once($CFG->dirroot . "/user/lib.php");
+
+        $params = self::validate_parameters(self::view_user_list_parameters(),
+                                            array(
+                                                'courseid' => $courseid
+                                            ));
+
+        $warnings = array();
+
+        if (empty($params['courseid'])) {
+            $params['courseid'] = SITEID;
+        }
+
+        $course = get_course($params['courseid']);
+
+        if ($course->id == SITEID) {
+            $context = context_system::instance();
+        } else {
+            $context = context_course::instance($course->id);
+        }
+        self::validate_context($context);
+
+        if ($course->id == SITEID) {
+            require_capability('moodle/site:viewparticipants', $context);
+        } else {
+            require_capability('moodle/course:viewparticipants', $context);
+        }
+
+        user_list_view($course, $context);
+
+        $result = array();
+        $result['status'] = true;
+        $result['warnings'] = $warnings;
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since Moodle 2.9
+     */
+    public static function view_user_list_returns() {
+        return new external_single_structure(
+            array(
+                'status' => new external_value(PARAM_BOOL, 'status: true if success'),
+                'warnings' => new external_warnings()
+            )
+        );
+    }
+
+    /**
+     * Returns description of method parameters
+     *
+     * @return external_function_parameters
+     * @since Moodle 2.9
+     */
+    public static function view_user_profile_parameters() {
+        return new external_function_parameters(
+            array(
+                'userid' => new external_value(PARAM_INT, 'id of the user, 0 for current user', VALUE_REQUIRED),
+                'courseid' => new external_value(PARAM_INT, 'id of the course, default site course', VALUE_DEFAULT, 0)
+            )
+        );
+    }
+
+    /**
+     * Simulate the /user/index.php and /user/profile.php web interface page triggering events
+     *
+     * @param int $userid id of user
+     * @param int $courseid id of course
+     * @return array of warnings and status result
+     * @since Moodle 2.9
+     * @throws moodle_exception
+     */
+    public static function view_user_profile($userid, $courseid = 0) {
+        global $CFG, $USER;
+        require_once($CFG->dirroot . "/user/profile/lib.php");
+
+        $params = self::validate_parameters(self::view_user_profile_parameters(),
+                                            array(
+                                                'userid' => $userid,
+                                                'courseid' => $courseid
+                                            ));
+
+        $warnings = array();
+
+        if (empty($params['userid'])) {
+            $params['userid'] = $USER->id;
+        }
+
+        if (empty($params['courseid'])) {
+            $params['courseid'] = SITEID;
+        }
+
+        $course = get_course($params['courseid']);
+        $user = core_user::get_user($params['userid'], '*', MUST_EXIST);
+
+        if ($user->deleted) {
+            throw new moodle_exception('userdeleted');
+        }
+        if (isguestuser($user)) {
+            // Can not view profile of guest - thre is nothing to see there.
+            throw new moodle_exception('invaliduserid');
+        }
+
+        if ($course->id == SITEID) {
+            $coursecontext = context_system::instance();;
+        } else {
+            $coursecontext = context_course::instance($course->id);
+        }
+        self::validate_context($coursecontext);
+
+        $currentuser = $USER->id == $user->id;
+        $usercontext = context_user::instance($user->id);
+
+        if (!$currentuser and
+                !has_capability('moodle/user:viewdetails', $coursecontext) and
+                !has_capability('moodle/user:viewdetails', $usercontext)) {
+            throw new moodle_exception('cannotviewprofile');
+        }
+
+        // Case like user/profile.php.
+        if ($course->id == SITEID) {
+            profile_view($user, $usercontext);
+        } else {
+            // Case like user/view.php.
+            if (!$currentuser and !is_enrolled($coursecontext, $user->id)) {
+                throw new moodle_exception('notenrolledprofile');
+            }
+
+            profile_view($user, $coursecontext, $course);
+        }
+
+        $result = array();
+        $result['status'] = true;
+        $result['warnings'] = $warnings;
+        return $result;
+    }
+
+    /**
+     * Returns description of method result value
+     *
+     * @return external_description
+     * @since Moodle 2.9
+     */
+    public static function view_user_profile_returns() {
+        return new external_single_structure(
+            array(
+                'status' => new external_value(PARAM_BOOL, 'status: true if success'),
+                'warnings' => new external_warnings()
             )
         );
     }

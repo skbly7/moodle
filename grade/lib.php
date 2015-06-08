@@ -818,12 +818,14 @@ class grade_plugin_info {
  * @param boolean $shownavigation should the gradebook navigation drop down (or tabs) be shown?
  * @param string  $headerhelpidentifier The help string identifier if required.
  * @param string  $headerhelpcomponent The component for the help string.
+ * @param stdClass $user The user object for use with the user context header.
  *
  * @return string HTML code or nothing if $return == false
  */
 function print_grade_page_head($courseid, $active_type, $active_plugin=null,
                                $heading = false, $return=false,
-                               $buttons=false, $shownavigation=true, $headerhelpidentifier = null, $headerhelpcomponent = null) {
+                               $buttons=false, $shownavigation=true, $headerhelpidentifier = null, $headerhelpcomponent = null,
+                               $user = null) {
     global $CFG, $OUTPUT, $PAGE;
 
     if ($active_type === 'preferences') {
@@ -870,9 +872,16 @@ function print_grade_page_head($courseid, $active_type, $active_plugin=null,
     }
 
     if ($shownavigation) {
+        $navselector = null;
         if ($courseid != SITEID &&
                 ($CFG->grade_navmethod == GRADE_NAVMETHOD_COMBO || $CFG->grade_navmethod == GRADE_NAVMETHOD_DROPDOWN)) {
-            $returnval .= print_grade_plugin_selector($plugin_info, $active_type, $active_plugin, $return);
+            // It's absolutely essential that this grade plugin selector is shown after the user header. Just ask Fred.
+            $navselector = print_grade_plugin_selector($plugin_info, $active_type, $active_plugin, true);
+            if ($return) {
+                $returnval .= $navselector;
+            } else if (!isset($user)) {
+                echo $navselector;
+            }
         }
 
         $output = '';
@@ -880,7 +889,17 @@ function print_grade_page_head($courseid, $active_type, $active_plugin=null,
         if (isset($headerhelpidentifier)) {
             $output = $OUTPUT->heading_with_help($heading, $headerhelpidentifier, $headerhelpcomponent);
         } else {
-            $output = $OUTPUT->heading($heading);
+            if (isset($user)) {
+                $output = $OUTPUT->context_header(
+                        array(
+                            'heading' => fullname($user),
+                            'user' => $user,
+                            'usercontext' => context_user::instance($user->id)
+                        ), 2
+                    ) . $navselector;
+            } else {
+                $output = $OUTPUT->heading($heading);
+            }
         }
 
         if ($return) {
@@ -1253,7 +1272,7 @@ class grade_structure {
         // Object holding pix_icon information before instantiation.
         $icon = new stdClass();
         $icon->attributes = array(
-            'class' => 'item itemicon'
+            'class' => 'icon itemicon'
         );
         $icon->component = 'moodle';
 
@@ -2618,7 +2637,6 @@ abstract class grade_helper {
      * letter => get_string('letters', 'grades'),
      * export => get_string('export', 'grades'),
      * import => get_string('import'),
-     * preferences => get_string('mypreferences', 'grades'),
      * settings => get_string('settings')
      *
      * @return array
@@ -2722,7 +2740,7 @@ abstract class grade_helper {
             if (file_exists($plugindir.'/preferences.php')) {
                 $url = new moodle_url('/grade/report/'.$plugin.'/preferences.php', array('id'=>$courseid));
                 $gradepreferences[$plugin] = new grade_plugin_info($plugin, $url,
-                    get_string('mypreferences', 'grades') . ': ' . $pluginstr);
+                    get_string('preferences', 'grades') . ': ' . $pluginstr);
             }
         }
         if (count($gradereports) == 0) {

@@ -32,6 +32,7 @@ use Behat\Behat\Context\Step\Given as Given,
     Behat\Behat\Context\Step\When as When,
     Behat\Behat\Context\Step\Then as Then,
     Behat\Gherkin\Node\TableNode as TableNode,
+    Behat\Gherkin\Node\PyStringNode as PyStringNode,
     Behat\Mink\Element\NodeElement as NodeElement,
     Behat\Mink\Exception\ExpectationException as ExpectationException,
     Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException;
@@ -157,6 +158,19 @@ class behat_forms extends behat_base {
      */
     public function i_set_the_field_to($field, $value) {
         $this->set_field_value($field, $value);
+    }
+
+    /**
+     * Sets the specified value to the field.
+     *
+     * @Given /^I set the field "(?P<field_string>(?:[^"]|\\")*)" to multiline$/
+     * @throws ElementNotFoundException Thrown by behat_base::find
+     * @param string $field
+     * @param PyStringNode $value
+     * @return void
+     */
+    public function i_set_the_field_to_multiline($field, PyStringNode $value) {
+        $this->set_field_value($field, (string)$value);
     }
 
     /**
@@ -367,6 +381,23 @@ class behat_forms extends behat_base {
         // guess the type properly as it is a select tag.
         $field = behat_field_manager::get_form_field_from_label($fieldlocator, $this);
         $field->set_value($value);
+    }
+
+    /**
+     * Select a value from single select and redirect.
+     *
+     * @Given /^I select "(?P<singleselect_option_string>(?:[^"]|\\")*)" from the "(?P<singleselect_name_string>(?:[^"]|\\")*)" singleselect$/
+     */
+    public function i_select_from_the_singleselect($option, $singleselect) {
+        $actions = array(
+            new Given('I set the field "' . $this->escape($singleselect) . '" to "' . $this->escape($option) . '"'),
+        );
+
+        if (!$this->running_javascript()) {
+            $actions[] = new Given('I press "' . get_string('go') . '"');
+        }
+
+        return $actions;
     }
 
 }

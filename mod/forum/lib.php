@@ -851,7 +851,7 @@ function forum_cron() {
 
     cron_setup_user();
 
-    $sitetimezone = $CFG->timezone;
+    $sitetimezone = core_date::get_server_timezone();
 
     // Now see if there are any digest mails waiting to be sent, and if we should send them
 
@@ -1190,7 +1190,7 @@ function forum_make_mail_text($course, $cm, $forum, $discussion, $post, $userfro
 
     $by = New stdClass;
     $by->name = fullname($userfrom, $viewfullnames);
-    $by->date = userdate($post->modified, "", $userto->timezone);
+    $by->date = userdate($post->modified, "", core_date::get_user_timezone($userto));
 
     $strbynameondate = get_string('bynameondate', 'forum', $by);
 
@@ -1214,6 +1214,7 @@ function forum_make_mail_text($course, $cm, $forum, $discussion, $post, $userfro
 
     $posttext .= "\n";
     $posttext .= $CFG->wwwroot.'/mod/forum/discuss.php?d='.$discussion->id;
+    $posttext .= "\n";
     $posttext .= format_string($post->subject,true);
     if ($bare) {
         $posttext .= " ($CFG->wwwroot/mod/forum/discuss.php?d=$discussion->id#p$post->id)";
@@ -3063,7 +3064,7 @@ function forum_make_mail_post($course, $cm, $forum, $discussion, $post, $userfro
     $fullname = fullname($userfrom, $viewfullnames);
     $by = new stdClass();
     $by->name = '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$userfrom->id.'&amp;course='.$course->id.'">'.$fullname.'</a>';
-    $by->date = userdate($post->modified, '', $userto->timezone);
+    $by->date = userdate($post->modified, '', core_date::get_user_timezone($userto));
     $output .= '<div class="author">'.get_string('bynameondate', 'forum', $by).'</div>';
 
     $output .= '</td></tr>';
@@ -3388,7 +3389,7 @@ function forum_print_post($post, $discussion, $forum, &$cm, $course, $ownpost=fa
     }
 
     if (!empty($post->lastpost)) {
-        $forumpostclass = ' lastpost';
+        $forumpostclass .= ' lastpost';
     }
 
     $postbyuser = new stdClass;
@@ -3929,14 +3930,10 @@ function forum_set_return() {
     global $CFG, $SESSION;
 
     if (! isset($SESSION->fromdiscussion)) {
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-            $referer = $_SERVER['HTTP_REFERER'];
-        } else {
-            $referer = "";
-        }
+        $referer = clean_param($_SERVER['HTTP_REFERER'], PARAM_LOCALURL);
         // If the referer is NOT a login screen then save it.
         if (! strncasecmp("$CFG->wwwroot/login", $referer, 300)) {
-            $SESSION->fromdiscussion = $_SERVER["HTTP_REFERER"];
+            $SESSION->fromdiscussion = $referer;
         }
     }
 }
@@ -4094,8 +4091,8 @@ function forum_print_attachments($post, $cm, $type) {
                 $output .= plagiarism_get_links(array('userid' => $post->userid,
                     'file' => $file,
                     'cmid' => $cm->id,
-                    'course' => $post->course,
-                    'forum' => $post->forum));
+                    'course' => $cm->course,
+                    'forum' => $cm->instance));
                 $output .= '<br />';
             }
         }
@@ -7762,4 +7759,89 @@ function forum_get_context($forumid, $context = null) {
     }
 
     return $context;
+}
+
+/**
+ * Mark the activity completed (if required) and trigger the course_module_viewed event.
+ *
+ * @param  stdClass $forum   forum object
+ * @param  stdClass $course  course object
+ * @param  stdClass $cm      course module object
+ * @param  stdClass $context context object
+ * @since Moodle 2.9
+ */
+function forum_view($forum, $course, $cm, $context) {
+
+    // Completion.
+    $completion = new completion_info($course);
+    $completion->set_module_viewed($cm);
+
+    // Trigger course_module_viewed event.
+
+    $params = array(
+        'context' => $context,
+        'objectid' => $forum->id
+    );
+
+    $event = \mod_forum\event\course_module_viewed::create($params);
+    $event->add_record_snapshot('course_modules', $cm);
+    $event->add_record_snapshot('course', $course);
+    $event->add_record_snapshot('forum', $forum);
+    $event->trigger();
+}
+
+/**
+ * Trigger the discussion viewed event
+ *
+ * @param  stdClass $modcontext module context object
+ * @param  stdClass $forum      forum object
+ * @param  stdClass $discussion discussion object
+ * @since Moodle 2.9
+ */
+function forum_discussion_view($modcontext, $forum, $discussion) {
+    $params = array(
+        'context' => $modcontext,
+        'objectid' => $discussion->id,
+    );
+
+    $event = \mod_forum\event\discussion_viewed::create($params);
+    $event->add_record_snapshot('forum_discussions', $discussion);
+    $event->add_record_snapshot('forum', $forum);
+    $event->trigger();
+}
+
+/**
+ * Add nodes to myprofile page.
+ *
+ * @param \core_user\output\myprofile\tree $tree Tree object
+ * @param stdClass $user user object
+ * @param bool $iscurrentuser
+ * @param stdClass $course Course object
+ *
+ * @return bool
+ */
+function mod_forum_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course) {
+    if (isguestuser($user)) {
+        // The guest user cannot post, so it is not possible to view any posts.
+        // May as well just bail aggressively here.
+        return false;
+    }
+    $postsurl = new moodle_url('/mod/forum/user.php', array('id' => $user->id));
+    if (!empty($course)) {
+        $postsurl->param('course', $course->id);
+    }
+    $string = get_string('forumposts', 'mod_forum');
+    $node = new core_user\output\myprofile\node('miscellaneous', 'forumposts', $string, null, $postsurl);
+    $tree->add_node($node);
+
+    $discussionssurl = new moodle_url('/mod/forum/user.php', array('id' => $user->id, 'mode' => 'discussions'));
+    if (!empty($course)) {
+        $discussionssurl->param('course', $course->id);
+    }
+    $string = get_string('myprofileotherdis', 'mod_forum');
+    $node = new core_user\output\myprofile\node('miscellaneous', 'forumdiscussions', $string, null,
+        $discussionssurl);
+    $tree->add_node($node);
+
+    return true;
 }

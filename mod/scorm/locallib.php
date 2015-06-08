@@ -495,13 +495,6 @@ function scorm_insert_track($userid, $scormid, $scoid, $attempt, $element, $valu
                         $track->value = $objectivesatisfiedstatus;
                         $track->timemodified = time();
                         $id = $DB->insert_record('scorm_scoes_track', $track);
-                        ob_start();
-                        $filepath = $CFG->dataroot."\\temp\\tempfile.txt";
-                        $fh = fopen($filepath, "a+");
-                        var_dump($track);
-                        $string = ob_get_clean();
-                        fwrite($fh, $string);
-                        fclose($fh);
                     }
                 }
             }
@@ -850,7 +843,7 @@ function scorm_get_all_attempts($scormid, $userid) {
 function scorm_view_display ($user, $scorm, $action, $cm) {
     global $CFG, $DB, $PAGE, $OUTPUT, $COURSE;
 
-    if ($scorm->scormtype != SCORM_TYPE_LOCAL && $scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
+    if ($scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
         scorm_parse($scorm, false);
     }
 
@@ -952,7 +945,7 @@ function scorm_simple_play($scorm, $user, $context, $cmid) {
         return $result;
     }
 
-    if ($scorm->scormtype != SCORM_TYPE_LOCAL && $scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
+    if ($scorm->updatefreq == SCORM_UPDATE_EVERYTIME) {
         scorm_parse($scorm, false);
     }
     $scoes = $DB->get_records_select('scorm_scoes', 'scorm = ? AND '.

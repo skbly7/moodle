@@ -145,10 +145,10 @@ class mod_forum_post_form extends moodleform {
         if (!empty($CFG->forum_enabletimedposts) && !$post->parent && has_capability('mod/forum:viewhiddentimedposts', $coursecontext)) { // hack alert
             $mform->addElement('header', 'displayperiod', get_string('displayperiod', 'forum'));
 
-            $mform->addElement('date_selector', 'timestart', get_string('displaystart', 'forum'), array('optional'=>true));
+            $mform->addElement('date_time_selector', 'timestart', get_string('displaystart', 'forum'), array('optional' => true));
             $mform->addHelpButton('timestart', 'displaystart', 'forum');
 
-            $mform->addElement('date_selector', 'timeend', get_string('displayend', 'forum'), array('optional'=>true));
+            $mform->addElement('date_time_selector', 'timeend', get_string('displayend', 'forum'), array('optional' => true));
             $mform->addHelpButton('timeend', 'displayend', 'forum');
 
         } else {
@@ -174,6 +174,13 @@ class mod_forum_post_form extends moodleform {
 
             $contextcheck = has_capability('mod/forum:movediscussions', $modulecontext) && empty($post->parent) && $groupcount > 1;
             if ($contextcheck) {
+                if (has_capability('mod/forum:canposttomygroups', $modulecontext)
+                            && !isset($post->edit)) {
+                    $mform->addElement('checkbox', 'posttomygroups', get_string('posttomygroups', 'forum'));
+                    $mform->addHelpButton('posttomygroups', 'posttomygroups', 'forum');
+                    $mform->disabledIf('groupinfo', 'posttomygroups', 'checked');
+                }
+
                 foreach ($groupdata as $grouptemp) {
                     $groupinfo[$grouptemp->id] = $grouptemp->name;
                 }
@@ -196,6 +203,7 @@ class mod_forum_post_form extends moodleform {
         } else {
             $submit_string = get_string('posttoforum', 'forum');
         }
+
         $this->add_action_buttons(true, $submit_string);
 
         $mform->addElement('hidden', 'course');
