@@ -1033,11 +1033,15 @@ function clean_param($param, $type) {
                 // Simulate the HTTPS version of the site.
                 $httpswwwroot = str_replace('http://', 'https://', $CFG->wwwroot);
 
-                if (preg_match(':^/:', $param)) {
+                if ($param === $CFG->wwwroot) {
+                    // Exact match;
+                } else if (!empty($CFG->loginhttps) && $param === $httpswwwroot) {
+                    // Exact match;
+                } else if (preg_match(':^/:', $param)) {
                     // Root-relative, ok!
-                } else if (preg_match('/^' . preg_quote($CFG->wwwroot, '/') . '/i', $param)) {
+                } else if (preg_match('/^' . preg_quote($CFG->wwwroot . '/', '/') . '/i', $param)) {
                     // Absolute, and matches our wwwroot.
-                } else if (!empty($CFG->loginhttps) && preg_match('/^' . preg_quote($httpswwwroot, '/') . '/i', $param)) {
+                } else if (!empty($CFG->loginhttps) && preg_match('/^' . preg_quote($httpswwwroot . '/', '/') . '/i', $param)) {
                     // Absolute, and matches our httpswwwroot.
                 } else {
                     // Relative - let's make sure there are no tricks.
@@ -2803,15 +2807,6 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
         }
     }
 
-    // Set the global $COURSE.
-    // TODO MDL-49434: setting current course/cm should be after the check $cm->uservisible .
-    if ($cm) {
-        $PAGE->set_cm($cm, $course);
-        $PAGE->set_pagelayout('incourse');
-    } else if (!empty($courseorid)) {
-        $PAGE->set_course($course);
-    }
-
     // Check visibility of activity to current user; includes visible flag, conditional availability, etc.
     if ($cm && !$cm->uservisible) {
         if ($preventredirect) {
@@ -2823,6 +2818,14 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
             $url = new moodle_url('/');
         }
         redirect($url, get_string('activityiscurrentlyhidden'));
+    }
+
+    // Set the global $COURSE.
+    if ($cm) {
+        $PAGE->set_cm($cm, $course);
+        $PAGE->set_pagelayout('incourse');
+    } else if (!empty($courseorid)) {
+        $PAGE->set_course($course);
     }
 
     // Finally access granted, update lastaccess times.

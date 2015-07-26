@@ -14,19 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace core\progress;
-
-defined('MOODLE_INTERNAL') || die();
-
 /**
- * Progress handler that ignores progress entirely.
+ * SCORM external functions and service definitions.
  *
- * @package core_progress
- * @copyright 2013 The Open University
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package    mod_scorm
+ * @category   external
+ * @copyright  2015 Juan Leyva <juan@moodle.com>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @since      Moodle 3.0
  */
-class null extends base {
-    public function update_progress() {
-        // Do nothing.
-    }
-}
+
+$functions = array(
+
+    'mod_scorm_view_scorm' => array(
+        'classname'     => 'mod_scorm_external',
+        'methodname'    => 'view_scorm',
+        'description'   => 'Trigger the course module viewed event.',
+        'type'          => 'write',
+        'capabilities'  => ''
+    ),
+);
